@@ -1,0 +1,8 @@
+# StackSentry Allowlist
+# Add resource ARNs or identifiers (one per line) to suppress findings.
+# Lines starting with # are comments.
+#
+# Examples:
+# arn:aws:iam::123456789012:user/ci-bot
+# sg-0abc1234def56789a
+# my-public-assets-bucket

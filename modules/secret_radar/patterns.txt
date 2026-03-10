@@ -1,0 +1,62 @@
+# StackSentry Secret Radar — Detection Patterns
+# Format: One regex per line. Lines starting with # are comments.
+
+# AWS Access Key ID
+AKIA[0-9A-Z]{16}
+
+# AWS Secret Key (heuristic — 40-char base64)
+[0-9a-zA-Z/+]{40}
+
+# GCP API Key
+AIza[0-9A-Za-z\-_]{35}
+
+# Stripe Live Key
+sk_live_[0-9a-zA-Z]{24,}
+
+# Stripe Test Key
+sk_test_[0-9a-zA-Z]{24,}
+
+# Slack Token
+xox[baprs]-[0-9a-zA-Z]{10,}
+
+# GitHub Personal Access Token
+ghp_[0-9a-zA-Z]{36}
+
+# GitHub OAuth Token
+gho_[0-9a-zA-Z]{36}
+
+# GitHub App Token
+ghu_[0-9a-zA-Z]{36}
+
+# RSA Private Key
+-----BEGIN RSA PRIVATE KEY-----
+
+# EC Private Key
+-----BEGIN EC PRIVATE KEY-----
+
+# Generic Private Key
+-----BEGIN PRIVATE KEY-----
+
+# Hardcoded password
+password\s*=\s*["'][^"']{6,}
+
+# Hardcoded secret
+secret\s*=\s*["'][^"']{6,}
+
+# Hardcoded token
+token\s*=\s*["'][^"']{6,}
+
+# Hardcoded API key
+api_key\s*=\s*["'][^"']{6,}
+
+# Azure Storage Account Key
+DefaultEndpointsProtocol=https;AccountName=
+
+# SendGrid API Key
+SG\.[0-9A-Za-z\-_]{22}\.[0-9A-Za-z\-_]{43}
+
+# Twilio Account SID
+AC[0-9a-f]{32}
+
+# Mailgun API Key
+key-[0-9a-zA-Z]{32}

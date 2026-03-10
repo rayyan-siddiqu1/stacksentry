@@ -1,0 +1,316 @@
+#!/usr/bin/env bash
+# bin/stacksentry — StackSentry CLI entrypoint
+set -euo pipefail
+
+# ── Resolve project root ───────────────────────────────────────────────────
+STACKSENTRY_HOME="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+export STACKSENTRY_HOME
+
+STACKSENTRY_VERSION="0.1.0"
+export STACKSENTRY_VERSION
+
+# ── Source configuration ────────────────────────────────────────────────────
+CONFIG_DIR="${STACKSENTRY_HOME}/config"
+if [[ -f "${CONFIG_DIR}/stacksentry.conf" ]]; then
+    source "${CONFIG_DIR}/stacksentry.conf"
+fi
+
+# ── Source core libraries ───────────────────────────────────────────────────
+source "${STACKSENTRY_HOME}/core/output.sh"
+source "${STACKSENTRY_HOME}/core/logger.sh"
+source "${STACKSENTRY_HOME}/core/scoring.sh"
+source "${STACKSENTRY_HOME}/core/aws_session.sh"
+source "${STACKSENTRY_HOME}/core/report.sh"
+source "${STACKSENTRY_HOME}/core/alert.sh"
+
+# ── Initialize logging ─────────────────────────────────────────────────────
+log_init
+
+# ── Global state ────────────────────────────────────────────────────────────
+SAVE_REPORT=false
+TRIGGER_ALERT=false
+SEVERITY_FILTER=""
+
+# ── Usage ───────────────────────────────────────────────────────────────────
+show_usage() {
+    print_banner
+    echo "Usage: stacksentry <module> <command> [flags]"
+    echo ""
+    echo -e "${BOLD}Core Commands:${RESET}"
+    echo "  doctor                              Check all dependencies"
+    echo "  version                             Show version"
+    echo "  help                                Show this help"
+    echo ""
+    echo -e "${BOLD}Security Modules:${RESET}"
+    echo "  iam audit                           Full IAM security audit"
+    echo "  iam analyze                         Deep IAM least-privilege analysis"
+    echo "  iam alert                           Monitor CloudTrail for IAM events"
+    echo "  secrets scan --path <dir>           Scan directory for secrets"
+    echo "  secrets scan --repo <url>           Scan Git repository for secrets"
+    echo "  posture scan                        CIS benchmark security checks"
+    echo ""
+    echo -e "${BOLD}Governance Modules:${RESET}"
+    echo "  infra scan                          Detect infrastructure drift"
+    echo "  infra remediate                     Generate remediation scripts"
+    echo "  compliance map --framework <name>   Map to compliance framework"
+    echo "  cost scan                           Find idle/wasted resources"
+    echo "  cost teardown --dry-run             Preview teardown actions"
+    echo "  logs ingest --bucket <s3-path>      Pull CloudTrail logs"
+    echo "  logs search --user <name>           Search audit logs"
+    echo "  patches scan                        Check EC2 patch status"
+    echo "  patches runbook                     Generate patch scripts"
+    echo ""
+    echo -e "${BOLD}Global Flags:${RESET}"
+    echo "  --profile <name>      AWS CLI profile (default: ${STACKSENTRY_AWS_PROFILE:-default})"
+    echo "  --region <region>     AWS region (default: ${STACKSENTRY_AWS_REGION:-us-east-1})"
+    echo "  --output <format>     table | json | csv (default: table)"
+    echo "  --severity <level>    Filter: critical | high | medium | low"
+    echo "  --save                Save report to reports/ directory"
+    echo "  --alert               Trigger configured alert channels"
+    echo "  --verbose             Enable debug logging"
+    echo ""
+}
+
+# ── Doctor ──────────────────────────────────────────────────────────────────
+run_doctor() {
+    print_header "StackSentry Doctor — Dependency Check"
+
+    local pass=0 fail=0 total=0
+
+    _check_dep() {
+        local name="$1" check_cmd="$2" required="$3"
+        total=$((total + 1))
+        if eval "$check_cmd" &>/dev/null; then
+            print_pass "$name"
+            pass=$((pass + 1))
+        else
+            if [[ "$required" == "required" ]]; then
+                print_fail "$name (REQUIRED)"
+                fail=$((fail + 1))
+            else
+                print_warn "$name (optional)"
+                pass=$((pass + 1))
+            fi
+        fi
+    }
+
+    # Check bash version >= 4
+    total=$((total + 1))
+    if [[ "${BASH_VERSINFO[0]}" -ge 4 ]]; then
+        print_pass "bash ${BASH_VERSION} (>= 4.0)"
+        pass=$((pass + 1))
+    else
+        print_fail "bash ${BASH_VERSION} (requires >= 4.0)"
+        fail=$((fail + 1))
+    fi
+
+    _check_dep "aws cli v2"    "aws --version 2>&1 | grep -q 'aws-cli/2'"  "required"
+    _check_dep "jq"            "command -v jq"                                "required"
+    _check_dep "curl"          "command -v curl"                              "required"
+    _check_dep "git"           "command -v git"                               "required"
+    _check_dep "bc"            "command -v bc"                                "required"
+    _check_dep "column"        "command -v column"                            "required"
+    _check_dep "awk"           "command -v awk"                               "required"
+    _check_dep "sed"           "command -v sed"                               "required"
+    _check_dep "grep"          "command -v grep"                              "required"
+    _check_dep "mail/sendmail" "command -v mail || command -v sendmail"       "optional"
+
+    echo ""
+    echo -e "${BOLD}  ${pass}/${total} dependencies satisfied${RESET}"
+
+    if [[ "$fail" -gt 0 ]]; then
+        print_fail "${fail} required dependencies missing. Install them and re-run."
+        return 1
+    else
+        print_pass "All required dependencies installed!"
+        return 0
+    fi
+}
+
+# ── Global Flag Parsing ────────────────────────────────────────────────────
+parse_global_flags() {
+    REMAINING_ARGS=()
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --profile)
+                STACKSENTRY_AWS_PROFILE="$2"; shift 2 ;;
+            --region)
+                STACKSENTRY_AWS_REGION="$2"; shift 2 ;;
+            --output)
+                STACKSENTRY_OUTPUT_FORMAT="$2"; shift 2 ;;
+            --severity)
+                SEVERITY_FILTER="$(echo "$2" | tr '[:lower:]' '[:upper:]')"; shift 2 ;;
+            --save)
+                SAVE_REPORT=true; shift ;;
+            --alert)
+                TRIGGER_ALERT=true; shift ;;
+            --verbose)
+                STACKSENTRY_LOG_LEVEL="DEBUG"; shift ;;
+            --help|-h)
+                show_usage; exit 0 ;;
+            --version|-v)
+                echo "StackSentry v${STACKSENTRY_VERSION}"; exit 0 ;;
+            *)
+                REMAINING_ARGS+=("$1"); shift ;;
+        esac
+    done
+}
+
+# ── Command Router ──────────────────────────────────────────────────────────
+route_command() {
+    local command="${1:-help}"
+    shift || true
+
+    case "$command" in
+        doctor)
+            run_doctor
+            ;;
+        help)
+            show_usage
+            ;;
+        version)
+            echo "StackSentry v${STACKSENTRY_VERSION}"
+            ;;
+        iam)
+            local subcmd="${1:-audit}"; shift || true
+            case "$subcmd" in
+                audit)
+                    source "${STACKSENTRY_HOME}/modules/iam_lens/audit.sh"
+                    iam_lens_audit "$@"
+                    ;;
+                analyze)
+                    source "${STACKSENTRY_HOME}/modules/iam_lens/analyze.sh"
+                    iam_lens_analyze "$@"
+                    ;;
+                alert)
+                    source "${STACKSENTRY_HOME}/modules/iam_lens/alert.sh"
+                    iam_lens_alert "$@"
+                    ;;
+                *)
+                    print_fail "Unknown iam subcommand: $subcmd"
+                    echo "  Available: audit, analyze, alert"
+                    exit 1
+                    ;;
+            esac
+            ;;
+        secrets)
+            local subcmd="${1:-scan}"; shift || true
+            source "${STACKSENTRY_HOME}/modules/secret_radar/scan.sh"
+            secret_radar_scan "$@"
+            ;;
+        posture)
+            local subcmd="${1:-scan}"; shift || true
+            source "${STACKSENTRY_HOME}/modules/posture_board/scan.sh"
+            posture_board_scan "$@"
+            ;;
+        infra)
+            local subcmd="${1:-scan}"; shift || true
+            case "$subcmd" in
+                scan)
+                    source "${STACKSENTRY_HOME}/modules/infra_snap/scan.sh"
+                    infra_snap_scan "$@"
+                    ;;
+                remediate)
+                    source "${STACKSENTRY_HOME}/modules/infra_snap/remediate.sh"
+                    infra_snap_remediate "$@"
+                    ;;
+                *)
+                    print_fail "Unknown infra subcommand: $subcmd"
+                    echo "  Available: scan, remediate"
+                    exit 1
+                    ;;
+            esac
+            ;;
+        compliance)
+            local subcmd="${1:-map}"; shift || true
+            source "${STACKSENTRY_HOME}/modules/compliance_mapper/map.sh"
+            compliance_map "$@"
+            ;;
+        cost)
+            local subcmd="${1:-scan}"; shift || true
+            case "$subcmd" in
+                scan)
+                    source "${STACKSENTRY_HOME}/modules/cost_sentinel/scan.sh"
+                    cost_sentinel_scan "$@"
+                    ;;
+                teardown)
+                    source "${STACKSENTRY_HOME}/modules/cost_sentinel/teardown.sh"
+                    cost_sentinel_teardown "$@"
+                    ;;
+                *)
+                    print_fail "Unknown cost subcommand: $subcmd"
+                    echo "  Available: scan, teardown"
+                    exit 1
+                    ;;
+            esac
+            ;;
+        logs)
+            local subcmd="${1:-search}"; shift || true
+            case "$subcmd" in
+                ingest)
+                    source "${STACKSENTRY_HOME}/modules/audit_vault/ingest.sh"
+                    audit_vault_ingest "$@"
+                    ;;
+                search)
+                    source "${STACKSENTRY_HOME}/modules/audit_vault/search.sh"
+                    audit_vault_search "$@"
+                    ;;
+                *)
+                    print_fail "Unknown logs subcommand: $subcmd"
+                    echo "  Available: ingest, search"
+                    exit 1
+                    ;;
+            esac
+            ;;
+        patches)
+            local subcmd="${1:-scan}"; shift || true
+            case "$subcmd" in
+                scan)
+                    source "${STACKSENTRY_HOME}/modules/patch_tracker/scan.sh"
+                    patch_tracker_scan "$@"
+                    ;;
+                runbook)
+                    source "${STACKSENTRY_HOME}/modules/patch_tracker/runbook.sh"
+                    patch_tracker_runbook "$@"
+                    ;;
+                *)
+                    print_fail "Unknown patches subcommand: $subcmd"
+                    echo "  Available: scan, runbook"
+                    exit 1
+                    ;;
+            esac
+            ;;
+        *)
+            print_fail "Unknown command: $command"
+            echo ""
+            show_usage
+            exit 1
+            ;;
+    esac
+}
+
+# ── Post-scan actions (save/alert) ─────────────────────────────────────────
+post_scan_actions() {
+    local module_name="$1"
+    if [[ "$SAVE_REPORT" == true ]]; then
+        save_report "$module_name"
+    fi
+    if [[ "$TRIGGER_ALERT" == true ]]; then
+        alert_on_critical "$module_name"
+    fi
+}
+
+# ── Main ────────────────────────────────────────────────────────────────────
+main() {
+    parse_global_flags "$@"
+    log_info "cli" "stacksentry ${REMAINING_ARGS[*]:-help}"
+
+    if [[ ${#REMAINING_ARGS[@]} -eq 0 ]]; then
+        show_usage
+        exit 0
+    fi
+
+    route_command "${REMAINING_ARGS[@]}"
+}
+
+main "$@"
