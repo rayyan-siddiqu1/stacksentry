@@ -1,0 +1,22 @@
+# PCI DSS v4.0 — Mapping to StackSentry Posture Board Checks
+# Format: CHECK_ID|CONTROL_ID|CONTROL_NAME|FRAMEWORK
+1.1|8.3.1|MFA for Administrative Access — Root MFA|PCI_DSS
+1.2|8.6.1|System Account Management — Root access keys|PCI_DSS
+1.3|8.3.6|Password Complexity — Minimum length|PCI_DSS
+1.4|8.3.6|Password Complexity — Character requirements|PCI_DSS
+1.5|7.2.2|Appropriate Access Assignment — Policy management|PCI_DSS
+1.6|8.3.1|MFA for Administrative Access — User MFA|PCI_DSS
+2.1|1.3.1|Network Access Controls — S3 public ACL|PCI_DSS
+2.2|1.3.1|Network Access Controls — S3 public policy|PCI_DSS
+2.3|3.5.1|Protect Stored Account Data — S3 encryption|PCI_DSS
+2.4|3.1.1|Data Retention — S3 versioning|PCI_DSS
+2.5|10.2.1|Audit Log Implementation — S3 logging|PCI_DSS
+3.1|10.2.1|Audit Log Implementation — CloudTrail|PCI_DSS
+3.2|10.3.2|Audit Log Integrity — Log validation|PCI_DSS
+3.3|10.3.1|Audit Log Protection — Log encryption|PCI_DSS
+3.4|10.2.1|Audit Log Implementation — VPC flow logs|PCI_DSS
+3.5|10.2.1|Audit Log Implementation — Config tracking|PCI_DSS
+4.1|1.3.2|Network Security Controls — SSH restriction|PCI_DSS
+4.2|1.3.2|Network Security Controls — RDP restriction|PCI_DSS
+4.3|1.3.1|Network Access Controls — Default VPC isolation|PCI_DSS
+4.4|1.3.1|Network Access Controls — VPC segmentation|PCI_DSS

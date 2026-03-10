@@ -168,6 +168,77 @@ stacksentry posture scan --checks network
 - Score delta vs previous scan (trend tracking)
 - Results saved to `reports/posture_TIMESTAMP.csv`
 
+### Infra Snap — Infrastructure Drift Detection
+
+```bash
+# Scan live infrastructure and detect drift
+stacksentry infra scan
+
+# Generate remediation scripts for detected drift
+stacksentry infra remediate
+```
+
+**What it scans:** EC2 instances, security groups, S3 buckets, VPCs, EBS volumes, RDS instances. Compares live state against `config/desired_state.yaml` if configured. Flags MISSING, MODIFIED, and EXTRA resources.
+
+### Compliance Mapper — Framework Mapping
+
+```bash
+# Map posture results to SOC2 controls
+stacksentry compliance map --framework soc2
+
+# Map to HIPAA
+stacksentry compliance map --framework hipaa
+
+# Map to PCI DSS
+stacksentry compliance map --framework pci_dss
+```
+
+Maps Posture Board results to compliance controls. Shows per-control status (SATISFIED / FAILING / UNTESTED) and calculates compliance percentage. Automatically runs a posture scan if none exists.
+
+### Cost Sentinel — Waste Detection
+
+```bash
+# Scan for idle and wasted resources
+stacksentry cost scan
+
+# Preview what would be cleaned up
+stacksentry cost teardown --dry-run
+
+# Generate executable teardown script
+stacksentry cost teardown --confirm
+```
+
+**Detects:** Idle EC2 (avg CPU < 5% over 14 days), unattached EBS volumes, unassociated Elastic IPs, empty S3 buckets, orphaned snapshots (>180 days, no AMI), unused NAT Gateways. Shows estimated monthly waste.
+
+### Audit Vault — CloudTrail Log Analysis
+
+```bash
+# Ingest CloudTrail logs from S3
+stacksentry logs ingest --bucket my-trail-bucket --days 7
+
+# Search events
+stacksentry logs search --user alice --event DeleteBucket
+stacksentry logs search --event ConsoleLogin --from 2026-03-01
+stacksentry logs search --ip 203.0.113.0
+```
+
+**Anomaly detection:** Mass delete patterns, off-hours activity, IAM modifications, multi-IP user access. Supports configurable alert rules via `config/alert_rules.conf` and cron-based monitoring.
+
+### Patch Tracker — EC2 Patch Management
+
+```bash
+# Check patch status of all running instances
+stacksentry patches scan
+
+# Generate patch runbook for all SSM-managed instances
+stacksentry patches runbook
+
+# Generate runbook for a specific instance
+stacksentry patches runbook --instance i-0abc123
+```
+
+**Checks:** AMI age (flags >180 days), deprecated AMIs, SSM patch compliance, SSM agent connectivity. Runbooks include pre-flight checks, backup AMI creation, patch installation, and post-patch verification.
+
 ## Output Formats
 
 ### Table (default)
@@ -239,11 +310,11 @@ stacksentry/
 │   ├── iam_lens/                # IAM security audit
 │   ├── secret_radar/            # Secret detection
 │   ├── posture_board/           # CIS benchmark checks
-│   ├── infra_snap/              # Infrastructure drift (planned)
-│   ├── compliance_mapper/       # Compliance mapping (planned)
-│   ├── cost_sentinel/           # Cost optimization (planned)
-│   ├── audit_vault/             # CloudTrail analysis (planned)
-│   └── patch_tracker/           # Patch management (planned)
+│   ├── infra_snap/              # Infrastructure drift detection
+│   ├── compliance_mapper/       # SOC2/HIPAA/PCI-DSS mapping
+│   ├── cost_sentinel/           # Cost optimization & waste detection
+│   ├── audit_vault/             # CloudTrail log analysis
+│   └── patch_tracker/           # EC2 patch management
 ├── config/
 │   ├── stacksentry.conf         # Global configuration
 │   └── allowlist.txt            # False positive suppression
@@ -251,15 +322,14 @@ stacksentry/
 └── logs/                        # Scan logs
 ```
 
-## Roadmap
+## Testing
 
-- [ ] **Infra Snap** — Detect infrastructure drift against desired state
-- [ ] **Compliance Mapper** — Map findings to SOC2, HIPAA, PCI-DSS controls
-- [ ] **Cost Sentinel** — Find idle EC2, unattached EBS, unused EIPs
-- [ ] **Audit Vault** — CloudTrail log ingestion, search, anomaly detection
-- [ ] **Patch Tracker** — EC2 patch status via SSM, CVE cross-reference
-- [ ] Test suite with mocked AWS responses
-- [ ] Automated install script
+```bash
+# Run the full test suite
+bash tests/run_tests.sh
+```
+
+35 tests covering CLI entrypoint, core libraries (output, scoring, reporting), Secret Radar (patterns, entropy), and IAM Lens (with mocked AWS). IAM tests require `jq` to be installed.
 
 ## License
 

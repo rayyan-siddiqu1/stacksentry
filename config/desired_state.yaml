@@ -1,0 +1,37 @@
+# StackSentry Infra Snap — Desired State Configuration
+# Define expected AWS resources. Infra Snap compares live state against this.
+#
+# Format: Simple YAML-like (parsed with awk/sed — no full YAML parser needed)
+# Each resource block: type, id/name, and expected properties.
+
+# --- EC2 Instances ---
+# ec2:
+#   - id: i-0abc123def456
+#     name: web-server-1
+#     type: t3.medium
+#     state: running
+#     vpc: vpc-0abc123
+#     subnet: subnet-0abc123
+#
+# --- Security Groups ---
+# security_groups:
+#   - id: sg-0abc123
+#     name: web-sg
+#     ingress:
+#       - port: 443
+#         cidr: 0.0.0.0/0
+#       - port: 22
+#         cidr: 10.0.0.0/8
+#
+# --- S3 Buckets ---
+# s3:
+#   - name: my-app-data
+#     encryption: true
+#     versioning: true
+#     public_access: false
+#
+# --- VPCs ---
+# vpcs:
+#   - id: vpc-0abc123
+#     cidr: 10.0.0.0/16
+#     name: production-vpc
