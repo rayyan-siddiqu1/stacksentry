@@ -1,25 +1,31 @@
 # StackSentry
 
-A pure-bash DevOps security and cloud governance CLI platform. No Python, no Node, no frontend frameworks — everything runs in the terminal using bash scripts, AWS CLI, and standard Unix tools.
+A pure-bash DevOps security and cloud governance CLI for AWS. No Python, no Node, no frontend frameworks — runs entirely in the terminal using bash scripts, AWS CLI, and standard Unix tools.
+
+StackSentry audits your cloud infrastructure, detects exposed secrets, enforces CIS benchmarks, tracks compliance, catches cost waste, analyzes CloudTrail logs, and monitors patch status — all from a single CLI.
 
 ## Quick Start
 
 ```bash
-# Clone and set up
+# Clone and install
 git clone <repo-url> && cd stacksentry
+sudo bash install.sh
+
+# Or install manually
 chmod +x bin/stacksentry
+sudo ln -s $(pwd)/bin/stacksentry /usr/local/bin/stacksentry
 
 # Check dependencies
-./bin/stacksentry doctor
+stacksentry doctor
 
 # Run an IAM security audit
-./bin/stacksentry iam audit
+stacksentry iam audit
 
 # Scan a directory for exposed secrets
-./bin/stacksentry secrets scan --path /your/project
+stacksentry secrets scan --path /your/project
 
 # Run CIS benchmark checks
-./bin/stacksentry posture scan
+stacksentry posture scan
 ```
 
 ## Requirements
@@ -41,12 +47,19 @@ Run `stacksentry doctor` to verify all dependencies.
 ## Installation
 
 ```bash
-# Option 1: Symlink to PATH
-ln -s $(pwd)/bin/stacksentry /usr/local/bin/stacksentry
+# Recommended: use the installer (creates symlink + runs doctor)
+sudo bash install.sh
 
-# Option 2: Add to PATH
+# Manual option 1: Symlink to PATH
+chmod +x bin/stacksentry
+sudo ln -s $(pwd)/bin/stacksentry /usr/local/bin/stacksentry
+
+# Manual option 2: Add to PATH
 export PATH="$PATH:/path/to/stacksentry/bin"
+# Add the above line to ~/.bashrc or ~/.zshrc to persist
 ```
+
+Symlinks are fully supported — the CLI resolves its real location before sourcing libraries, so it works from any PATH entry.
 
 ## Usage
 
@@ -93,7 +106,7 @@ stacksentry iam alert
 - Cross-account role trust
 - Unused roles and over-provisioned service access
 
-### Secret Radar — Secret Detection
+### Secret Radar — Secret & Credential Detection
 
 ```bash
 # Scan a local directory
@@ -109,19 +122,25 @@ stacksentry secrets scan --path . --git-history
 stacksentry secrets scan --path . --no-entropy
 ```
 
-**Detection patterns (20 built-in):**
-- AWS Access Keys and Secret Keys
-- GCP API Keys
-- Stripe Live/Test Keys
-- Slack Tokens
-- GitHub PATs, OAuth, and App Tokens
-- RSA / EC / Generic Private Keys
-- Hardcoded passwords, secrets, tokens, API keys
-- Azure Storage Account Keys
-- SendGrid, Twilio, Mailgun keys
+**33 built-in detection patterns across 4 categories:**
 
-**Features:**
-- Shannon entropy analysis for high-randomness values
+| Category | What it detects |
+|----------|----------------|
+| Cloud keys | AWS Access/Secret Keys, GCP API Keys, Azure Storage Keys |
+| Service tokens | Stripe Live/Test Keys, Slack Tokens, GitHub PATs/OAuth/App Tokens, SendGrid, Twilio, Mailgun |
+| Private keys | RSA, EC, and generic PEM-encoded private keys |
+| Database credentials | MySQL, PostgreSQL, MongoDB, Redis, MSSQL connection strings; JDBC URIs; SQLAlchemy DSNs; `DB_PASSWORD`, `DATABASE_URL`, and related env vars |
+| Hardcoded secrets | Passwords, secrets, tokens, API keys assigned in config files |
+
+**Loose `.env` file detection:**
+- Finds all `.env*` files (`.env`, `.env.local`, `.env.production`, etc.)
+- Skips safe templates (`.env.example`, `.env.sample`, `.env.template`)
+- Flags `.env` files not listed in `.gitignore` (HIGH severity)
+- Scans `.env` contents for sensitive variables like `DATABASE_URL`, `DB_PASSWORD`, `API_SECRET`, `PRIVATE_KEY`, etc.
+- Database credentials found in `.env` files are flagged as CRITICAL
+
+**Additional features:**
+- Shannon entropy analysis for high-randomness values (covers DB password vars, DSNs, etc.)
 - Git history scanning (last 100 commits)
 - Secret masking in output (first 4 + last 4 chars shown)
 - Allowlist support (`config/allowlist.txt`)
@@ -298,7 +317,7 @@ my-public-docs-bucket
 
 ```
 stacksentry/
-├── bin/stacksentry              # CLI entrypoint
+├── bin/stacksentry              # CLI entrypoint (symlink-safe)
 ├── core/
 │   ├── output.sh                # Colors, banners, tables
 │   ├── logger.sh                # Structured file logging
@@ -308,7 +327,7 @@ stacksentry/
 │   └── alert.sh                 # Slack & email dispatch
 ├── modules/
 │   ├── iam_lens/                # IAM security audit
-│   ├── secret_radar/            # Secret detection
+│   ├── secret_radar/            # Secret & DB credential detection
 │   ├── posture_board/           # CIS benchmark checks
 │   ├── infra_snap/              # Infrastructure drift detection
 │   ├── compliance_mapper/       # SOC2/HIPAA/PCI-DSS mapping

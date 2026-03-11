@@ -2,8 +2,16 @@
 # bin/stacksentry — StackSentry CLI entrypoint
 set -euo pipefail
 
-# ── Resolve project root ───────────────────────────────────────────────────
-STACKSENTRY_HOME="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# ── Resolve project root (follows symlinks) ───────────────────────────────
+_source="${BASH_SOURCE[0]}"
+while [[ -L "$_source" ]]; do
+    _dir="$(cd "$(dirname "$_source")" && pwd)"
+    _source="$(readlink "$_source")"
+    # If readlink returned a relative path, resolve it against the symlink dir
+    [[ "$_source" != /* ]] && _source="${_dir}/${_source}"
+done
+STACKSENTRY_HOME="$(cd "$(dirname "$_source")/.." && pwd)"
+unset _source _dir
 export STACKSENTRY_HOME
 
 STACKSENTRY_VERSION="0.1.0"
