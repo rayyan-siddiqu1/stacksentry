@@ -2,7 +2,7 @@
 # modules/secret_radar/scan.sh — Scan files and repos for exposed secrets
 
 SECRET_RADAR_MODULE="secret_radar"
-SCAN_FILE_TYPES="*.env,*.conf,*.yaml,*.yml,*.json,*.sh,*.py,*.js,*.ts,*.tf,*.rb,*.php,*.java,*.go,*.cfg,*.ini,*.properties,*.toml"
+SCAN_FILE_TYPES=".env*,*.env,*.conf,*.yaml,*.yml,*.json,*.sh,*.py,*.js,*.ts,*.tf,*.rb,*.php,*.java,*.go,*.cfg,*.ini,*.properties,*.toml"
 SCAN_EXCLUDE_DIRS=".git,node_modules,vendor,__pycache__,.venv,venv,.terraform,dist,build"
 MAX_FILE_SIZE_KB=1024
 
@@ -160,12 +160,14 @@ _scan_env_files() {
     local target="$1"
 
     # Find all .env files (including .env.local, .env.production, etc.)
+    # Uses -prune to skip large directories entirely instead of just filtering results
     local env_files
-    env_files=$(find "$target" -type f -name ".env*" \
-        ! -path "*/.git/*" ! -path "*/node_modules/*" ! -path "*/vendor/*" \
-        ! -path "*/__pycache__/*" ! -path "*/.venv/*" ! -path "*/venv/*" \
+    env_files=$(find "$target" \
+        \( -name .git -o -name node_modules -o -name vendor -o -name __pycache__ \
+           -o -name .venv -o -name venv -o -name .terraform -o -name dist -o -name build \) -prune \
+        -o -type f -name ".env*" \
         ! -name ".env.example" ! -name ".env.sample" ! -name ".env.template" \
-        2>/dev/null) || true
+        -print 2>/dev/null) || true
 
     [[ -z "$env_files" ]] && { print_pass "No loose .env files found"; return 0; }
 
@@ -255,7 +257,7 @@ _scan_entropy() {
 
     # Find key=value assignments and check entropy of value
     local kv_matches
-    kv_matches=$(grep -rn --include="*.env" --include="*.conf" --include="*.yaml" \
+    kv_matches=$(grep -rn --include=".env*" --include="*.env" --include="*.conf" --include="*.yaml" \
         --include="*.yml" --include="*.properties" --include="*.cfg" --include="*.toml" \
         --exclude-dir=".git" --exclude-dir="node_modules" --exclude-dir="vendor" \
         -E '(password|secret|token|key|api_key|apikey|access_key|auth|db_pass|db_password|database_password|mysql_password|pg_password|pgpassword|mongo_password|redis_password|dsn|database_url|db_uri)\s*[=:]\s*\S+' \
