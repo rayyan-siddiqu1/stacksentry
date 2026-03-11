@@ -74,6 +74,10 @@ secret_radar_scan() {
     print_info "Scanning files..."
     _scan_files "$scan_path" "$patterns_tmp"
 
+    # Loose .env file scan
+    print_info "Scanning for loose .env files..."
+    _scan_env_files "$scan_path"
+
     # Entropy scan
     if [[ "$scan_entropy" == true ]]; then
         print_info "Running entropy analysis..."
@@ -151,6 +155,67 @@ _scan_files() {
     done <<< "$matches"
 }
 
+# ── Loose .env File Scanner ─────────────────────────────────────────────────
+_scan_env_files() {
+    local target="$1"
+
+    # Find all .env files (including .env.local, .env.production, etc.)
+    local env_files
+    env_files=$(find "$target" -type f -name ".env*" \
+        ! -path "*/.git/*" ! -path "*/node_modules/*" ! -path "*/vendor/*" \
+        ! -path "*/__pycache__/*" ! -path "*/.venv/*" ! -path "*/venv/*" \
+        ! -name ".env.example" ! -name ".env.sample" ! -name ".env.template" \
+        2>/dev/null) || true
+
+    [[ -z "$env_files" ]] && { print_pass "No loose .env files found"; return 0; }
+
+    while IFS= read -r envfile; do
+        local basename
+        basename=$(basename "$envfile")
+        local relpath="${envfile#"$target"/}"
+
+        # Check if .env is in .gitignore
+        local in_gitignore=false
+        if [[ -d "${target}/.git" ]]; then
+            (cd "$target" && git check-ignore -q "$envfile" 2>/dev/null) && in_gitignore=true
+        fi
+
+        # Flag the file itself as a finding
+        if [[ "$in_gitignore" == false ]]; then
+            add_finding "HIGH" "$SECRET_RADAR_MODULE" "$relpath" \
+                "Loose .env file not in .gitignore: ${basename}" \
+                "Add ${basename} to .gitignore and remove from version control"
+        fi
+
+        # Scan contents for sensitive variables
+        local sensitive_lines
+        sensitive_lines=$(grep -nE \
+            '^\s*(PASSWORD|SECRET|TOKEN|API_KEY|API_SECRET|ACCESS_KEY|PRIVATE_KEY|DB_PASSWORD|DATABASE_PASSWORD|DATABASE_URL|DB_URI|DB_URL|CREDENTIAL|AUTH_TOKEN|MONGO_PASSWORD|REDIS_PASSWORD|PG_PASSWORD|MYSQL_PASSWORD)\s*=' \
+            "$envfile" 2>/dev/null) || true
+
+        if [[ -n "$sensitive_lines" ]]; then
+            while IFS= read -r line; do
+                local line_num content varname
+                line_num=$(echo "$line" | cut -d':' -f1)
+                content=$(echo "$line" | cut -d':' -f2-)
+                varname=$(echo "$content" | cut -d'=' -f1 | tr -d ' ')
+
+                local masked
+                masked=$(_mask_secret "$content")
+                [[ ${#masked} -gt 80 ]] && masked="${masked:0:77}..."
+
+                local sev="HIGH"
+                # DB creds and private keys in .env are critical
+                [[ "$varname" =~ (DB_PASSWORD|DATABASE_PASSWORD|DATABASE_URL|DB_URI|PRIVATE_KEY|MONGO_PASSWORD|REDIS_PASSWORD|PG_PASSWORD|MYSQL_PASSWORD) ]] && sev="CRITICAL"
+
+                add_finding "$sev" "$SECRET_RADAR_MODULE" "${relpath}:${line_num}" \
+                    "Sensitive var in .env: ${masked}" \
+                    "Move to a secrets manager (AWS SSM, Vault, etc.) and remove from file"
+            done <<< "$sensitive_lines"
+        fi
+    done <<< "$env_files"
+}
+
 # ── Git History Scanner ─────────────────────────────────────────────────────
 _scan_git_history() {
     local target="$1" patterns_file="$2"
@@ -193,7 +258,7 @@ _scan_entropy() {
     kv_matches=$(grep -rn --include="*.env" --include="*.conf" --include="*.yaml" \
         --include="*.yml" --include="*.properties" --include="*.cfg" --include="*.toml" \
         --exclude-dir=".git" --exclude-dir="node_modules" --exclude-dir="vendor" \
-        -E '(password|secret|token|key|api_key|apikey|access_key|auth)\s*[=:]\s*\S+' \
+        -E '(password|secret|token|key|api_key|apikey|access_key|auth|db_pass|db_password|database_password|mysql_password|pg_password|pgpassword|mongo_password|redis_password|dsn|database_url|db_uri)\s*[=:]\s*\S+' \
         "$target" 2>/dev/null) || true
 
     [[ -z "$kv_matches" ]] && return 0
@@ -262,6 +327,21 @@ _classify_finding() {
         _type="AWS Access Key"; _sev="CRITICAL"
     elif [[ "$content" =~ AIza[0-9A-Za-z_-]{35} ]]; then
         _type="GCP API Key"; _sev="CRITICAL"
+    elif [[ "$content" =~ mysql://[^:]+:[^@]+@ ]] || [[ "$content" =~ postgres(ql)?://[^:]+:[^@]+@ ]] || \
+         [[ "$content" =~ mongodb(\+srv)?://[^:]+:[^@]+@ ]]; then
+        _type="Database Connection String"; _sev="CRITICAL"
+    elif [[ "$content" =~ (DB|DATABASE)_PASSWORD[[:space:]]*[=:] ]]; then
+        _type="Database Password"; _sev="CRITICAL"
+    elif [[ "$content" =~ (DB_URI|DATABASE_URL|DB_URL|DATABASE_URI)[[:space:]]*[=:].*://[^:]+:[^@]+@ ]]; then
+        _type="Database URI with Credentials"; _sev="CRITICAL"
+    elif [[ "$content" =~ redis://:[^@]+@ ]]; then
+        _type="Redis Connection String"; _sev="HIGH"
+    elif [[ "$content" =~ jdbc:[a-z]+://.*password= ]]; then
+        _type="JDBC Connection String"; _sev="HIGH"
+    elif [[ "$content" =~ (db_pass|dbpassword|db_password|mysql_password|pg_password|pgpassword|mongo_password|redis_password)[[:space:]]*[=:] ]]; then
+        _type="Hardcoded DB Password"; _sev="HIGH"
+    elif [[ "$content" =~ Server=.*Password= ]]; then
+        _type="MSSQL Connection String"; _sev="CRITICAL"
     elif [[ "$content" =~ sk_live_ ]]; then
         _type="Stripe Live Key"; _sev="HIGH"
     elif [[ "$content" =~ -----BEGIN.*PRIVATE\ KEY----- ]]; then

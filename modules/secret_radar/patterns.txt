@@ -60,3 +60,43 @@ AC[0-9a-f]{32}
 
 # Mailgun API Key
 key-[0-9a-zA-Z]{32}
+
+# ── Database Credentials ───────────────────────────────────────────────────
+
+# MySQL/MariaDB connection string
+mysql://[^:]+:[^@]+@
+
+# PostgreSQL connection string
+postgres(ql)?://[^:]+:[^@]+@
+
+# MongoDB connection string (with credentials)
+mongodb(\+srv)?://[^:]+:[^@]+@
+
+# Redis connection string (with password)
+redis://:[^@]+@
+
+# MSSQL/SQL Server connection string
+Server=.*Password=
+
+# JDBC connection string with password
+jdbc:[a-z]+://.*password=
+
+# SQLAlchemy-style DB URI
+(mysql|postgres|postgresql|mssql|oracle)\+?[a-z]*://[^:]+:[^@]+@
+
+# DB_PASSWORD / DATABASE_PASSWORD env var
+(DB|DATABASE)_PASSWORD\s*[=:]\s*["']?[^"'\s]{6,}
+
+# DB_URI / DATABASE_URL with embedded credentials
+(DB_URI|DATABASE_URL|DB_URL|DATABASE_URI)\s*[=:]\s*["']?[a-z]+://[^:]+:[^@]+@
+
+# DSN with password component
+dsn\s*[=:]\s*["']?[a-z]+://[^:]+:[^@]+@
+
+# Hardcoded DB host+password combo
+(db_pass|dbpassword|db_password|mysql_password|pg_password|pgpassword|mongo_password|redis_password)\s*[=:]\s*["']?[^"'\s]{6,}
+
+# ── Loose .env Detection ──────────────────────────────────────────────────
+
+# .env variable assignments with secrets
+(SECRET|PASSWORD|CREDENTIAL|AUTH_TOKEN|PRIVATE_KEY|ACCESS_KEY|API_SECRET)\s*=\s*[^$\s]{6,}
