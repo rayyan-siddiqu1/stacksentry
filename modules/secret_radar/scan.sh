@@ -107,23 +107,24 @@ _scan_files() {
     local target="$1" patterns_file="$2"
     local allowlist="${STACKSENTRY_HOME}/config/allowlist.txt"
 
-    # Build include pattern for grep
-    local include_args=""
+    # Build grep arguments as an array (prevents glob expansion of patterns like .env*)
+    local grep_args=(-rn)
+
     IFS=',' read -ra types <<< "$SCAN_FILE_TYPES"
     for t in "${types[@]}"; do
-        include_args+="--include=${t} "
+        grep_args+=("--include=$t")
     done
 
-    # Build exclude dirs
-    local exclude_args=""
     IFS=',' read -ra excludes <<< "$SCAN_EXCLUDE_DIRS"
     for d in "${excludes[@]}"; do
-        exclude_args+="--exclude-dir=${d} "
+        grep_args+=("--exclude-dir=$d")
     done
+
+    grep_args+=(-f "$patterns_file" "$target")
 
     # Run grep with patterns
     local matches
-    matches=$(eval grep -rn $include_args $exclude_args -f "$patterns_file" "$target" 2>/dev/null) || true
+    matches=$(grep "${grep_args[@]}" 2>/dev/null) || true
 
     [[ -z "$matches" ]] && { print_pass "No secrets found in file scan"; return 0; }
 
@@ -189,11 +190,11 @@ _scan_env_files() {
                 "Add ${basename} to .gitignore and remove from version control"
         fi
 
-        # Scan contents for sensitive variables
+        # Scan contents for sensitive variables (match any var containing these keywords)
         local sensitive_lines
-        sensitive_lines=$(grep -nE \
-            '^\s*(PASSWORD|SECRET|TOKEN|API_KEY|API_SECRET|ACCESS_KEY|PRIVATE_KEY|DB_PASSWORD|DATABASE_PASSWORD|DATABASE_URL|DB_URI|DB_URL|CREDENTIAL|AUTH_TOKEN|MONGO_PASSWORD|REDIS_PASSWORD|PG_PASSWORD|MYSQL_PASSWORD)\s*=' \
-            "$envfile" 2>/dev/null) || true
+        sensitive_lines=$(grep -inE \
+            '^\s*[A-Z_]*(PASSWORD|SECRET|TOKEN|KEY|CREDENTIAL|AUTH|DSN|DATABASE_URL|DB_URI|DB_URL|DB_PASS)[A-Z_]*\s*=\s*\S+' \
+            "$envfile" 2>/dev/null | grep -vE '^\s*#' | grep -vE '=\s*$' ) || true
 
         if [[ -n "$sensitive_lines" ]]; then
             while IFS= read -r line; do
@@ -207,8 +208,8 @@ _scan_env_files() {
                 [[ ${#masked} -gt 80 ]] && masked="${masked:0:77}..."
 
                 local sev="HIGH"
-                # DB creds and private keys in .env are critical
-                [[ "$varname" =~ (DB_PASSWORD|DATABASE_PASSWORD|DATABASE_URL|DB_URI|PRIVATE_KEY|MONGO_PASSWORD|REDIS_PASSWORD|PG_PASSWORD|MYSQL_PASSWORD) ]] && sev="CRITICAL"
+                # DB creds, private keys, and secret keys in .env are critical
+                [[ "$varname" =~ (DB_PASSWORD|DATABASE_PASSWORD|DATABASE_URL|DB_URI|DB_PASS|PRIVATE_KEY|SECRET_KEY|SECRET_ACCESS_KEY|APP_SECRET) ]] && sev="CRITICAL"
 
                 add_finding "$sev" "$SECRET_RADAR_MODULE" "${relpath}:${line_num}" \
                     "Sensitive var in .env: ${masked}" \

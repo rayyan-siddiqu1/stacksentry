@@ -17,12 +17,26 @@ fi
 
 # ── Banner ──────────────────────────────────────────────────────────────────
 print_banner() {
-    echo -e "${CYAN}${BOLD}"
-    echo "  ╔═══════════════════════════════════════════╗"
-    echo "  ║         StackSentry v${STACKSENTRY_VERSION:-0.1.0}              ║"
-    echo "  ║     Cloud Security & Governance CLI       ║"
-    echo "  ╚═══════════════════════════════════════════╝"
-    echo -e "${RESET}"
+    local V="${STACKSENTRY_VERSION:-0.1.0}"
+    echo ""
+    echo -e "${CYAN}${BOLD}     _____ _             _     _____            _              ${RESET}"
+    echo -e "${CYAN}${BOLD}    / ____| |           | |   / ____|          | |             ${RESET}"
+    echo -e "${CYAN}${BOLD}   | (___ | |_ __ _  ___| | _| (___   ___ _ __| |_ _ __ _   _ ${RESET}"
+    echo -e "${CYAN}${BOLD}    \\___ \\| __/ _\` |/ __| |/ /\\___ \\ / _ \\ '_ \\| __| '__| | | |${RESET}"
+    echo -e "${CYAN}${BOLD}    ____) | || (_| | (__|   < ____) |  __/ | | | |_| |  | |_| |${RESET}"
+    echo -e "${CYAN}${BOLD}   |_____/ \\__\\__,_|\\___|_|\\_\\_____/ \\___|_| |_|\\__|_|   \\__, |${RESET}"
+    echo -e "${CYAN}${BOLD}                                                          __/ |${RESET}"
+    echo -e "${CYAN}${BOLD}                                                         |___/ ${RESET}"
+    echo ""
+    echo -e "   ${DIM}╭──────────────────────────────────────────────────────────────╮${RESET}"
+    echo -e "   ${DIM}│${RESET}  ${BOLD}v${V}${RESET}  ${DIM}│${RESET}  Cloud Security & Governance CLI  ${DIM}│${RESET}  ${GREEN}Pure Bash${RESET}  ${DIM}│${RESET}"
+    echo -e "   ${DIM}╰──────────────────────────────────────────────────────────────╯${RESET}"
+    echo ""
+    echo -e "   ${DIM}┌─────────┬──────────────┬──────────────┬──────────────────────┐${RESET}"
+    echo -e "   ${DIM}│${RESET} ${RED}IAM Lens${RESET} ${DIM}│${RESET} ${YELLOW}Secret Radar${RESET} ${DIM}│${RESET} ${GREEN}Posture Board${RESET}${DIM}│${RESET} ${CYAN}Compliance Mapper${RESET}   ${DIM}│${RESET}"
+    echo -e "   ${DIM}│${RESET} ${RED}CostSntl${RESET} ${DIM}│${RESET} ${YELLOW}Infra Snap${RESET}   ${DIM}│${RESET} ${GREEN}Audit Vault${RESET}  ${DIM}│${RESET} ${CYAN}Patch Tracker${RESET}       ${DIM}│${RESET}"
+    echo -e "   ${DIM}└─────────┴──────────────┴──────────────┴──────────────────────┘${RESET}"
+    echo ""
 }
 
 # ── Section Headers ─────────────────────────────────────────────────────────
